@@ -3,13 +3,18 @@ import { useBoard } from './Board';
 import type { BoardData, Item } from './types';
 import { Avatar, fmtDate } from './ui';
 
-/** Cards in lanes by a status column. Drag a card to another lane to change its status. */
-export function Kanban({ data, matches, onOpen }: { data: BoardData; matches: (i: Item) => boolean; onOpen: (id: string) => void }) {
+/**
+ * Cards in lanes by a status column. Drag a card to another lane to change its status.
+ * Which status column makes the lanes is part of the view (`lanes`).
+ */
+export function Kanban({ data, matches, onOpen, lanes: laneCol, onLanes }: {
+  data: BoardData; matches: (i: Item) => boolean; onOpen: (id: string) => void;
+  lanes: string | null; onLanes: (colId: string) => void;
+}) {
   const b = useBoard();
   const statusCols = data.columns.filter((c) => !c.is_sub && c.type === 'status');
-  const [colId, setColId] = useState(statusCols[0]?.id);
   const [over, setOver] = useState<string | null>(null);
-  const col = statusCols.find((c) => c.id === colId) ?? statusCols[0];
+  const col = statusCols.find((c) => c.id === laneCol) ?? statusCols[0];
   if (!col) return <div className="board-empty">Add a Status column to this board to see it as cards.</div>;
 
   const people = data.columns.filter((c) => !c.is_sub && c.type === 'people');
@@ -22,7 +27,7 @@ export function Kanban({ data, matches, onOpen }: { data: BoardData; matches: (i
     <div className="kanban-wrap">
       {statusCols.length > 1 && (
         <div className="kanban-pick">Cards by
-          <select className="input" value={col.id} onChange={(e) => setColId(e.target.value)}>
+          <select className="input" value={col.id} onChange={(e) => onLanes(e.target.value)}>
             {statusCols.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
         </div>

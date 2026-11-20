@@ -44,7 +44,9 @@ export const demo = {
     folders: [{ id: 'f1', workspace_id: 'w1', name: 'School Office', position: 0 }], boards: [board], people, me: people[0] }),
   addPerson: async (b: { name: string }) => ({ id: 'p' + Date.now(), name: b.name, email: null, color: '#21a67a' }),
   getBoard: async () => ({ board, groups, columns, items }),
-  createBoard: async () => ({ id: 'b1' }), patchBoard: ok, deleteBoard: ok,
+  createBoard: async () => ({ id: 'b1' }), deleteBoard: ok,
+  // Keeps saved views for this browser session so the auto-refresh doesn't drop them.
+  patchBoard: async (_: string, b: { views?: unknown[] }) => { if (b.views) Object.assign(board, { views: b.views }); return { ok: true }; },
   createGroup: async (_: string, b: { title?: string }) => ({ id: 'g' + Date.now(), board_id: 'b1', title: b.title || 'New Group', color: '#00c875', position: -1, collapsed: 0 }),
   patchGroup: ok, deleteGroup: ok,
   createColumn: async (_: string, b: { title: string; type: string; is_sub?: number }) => ({ id: 'c' + Date.now(), board_id: 'b1', is_sub: b.is_sub ?? 0, title: b.title, type: b.type, settings: {}, width: null, position: 99 }),

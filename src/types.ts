@@ -12,7 +12,25 @@ export type Item = {
 };
 export type BoardMeta = {
   id: string; name: string; workspace_id: string; folder_id: string | null; position: number;
-  description?: string | null; item_term?: string;
+  description?: string | null; item_term?: string; views?: BoardView[];
+};
+/**
+ * A saved way of looking at a board, shared by everyone on it (like monday's
+ * views): a layout plus its own search, filters and sort. Saved on the board
+ * itself (the Boards list's Views field), never as a copy of the items.
+ */
+export type ViewFilter = {
+  query?: string;
+  person?: string | null;
+  /** column id -> label ids to show (status or dropdown columns) */
+  labels?: Record<string, number[]>;
+};
+export type ViewSort = { col: string; dir: 'asc' | 'desc' } | null;
+export type BoardView = {
+  id: string; name: string; type: 'table' | 'kanban';
+  filter: ViewFilter; sort: ViewSort;
+  /** Kanban only: the status column the lanes come from */
+  lanes?: string | null;
 };
 export type BoardData = { board: BoardMeta; groups: Group[]; columns: Column[]; items: Item[] };
 export type Workspace = { id: string; name: string };

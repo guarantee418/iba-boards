@@ -1,11 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
 import { Cell } from './cells';
 import { ItemPanel } from './ItemPanel';
 import { Kanban } from './Kanban';
-import type { BoardData, Column, ColumnType, Group, Item, Person } from './types';
+import type { BoardData, BoardView, Column, ColumnType, Group, Item, Person } from './types';
 import { COLUMN_TYPES, GROUP_COLORS } from './types';
-import { Avatar, EditableText, MenuItem, Popover, useAnchor } from './ui';
+import { EditableText, MenuItem, Popover, useAnchor } from './ui';
+import { FilterButton, PersonButton, SortButton, ViewTabs, defaultViews, matcher, sameState, sorter, stateOf, type ViewState } from './views';
+
+/** How often an open board checks SharePoint for other people's changes. */
+const REFRESH_MS = 60_000;
+/** True while the person is typing in a cell, so a refresh never interrupts them. */
+const typingNow = () => !!document.activeElement?.matches('input:not(.search), textarea, select, [contenteditable="true"]');
 
 const DEFAULT_WIDTH: Record<ColumnType, number> = {
   status: 140, people: 100, date: 116, dropdown: 170, text: 190, long_text: 230, number: 100, checkbox: 84,
@@ -21,19 +27,51 @@ function useBoardApi(boardId: string, people: Person[], onAddPerson: (n: string,
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // monday pushes other people's edits live. Without a server we do the next
+  // best thing: re-read the board every minute and whenever the tab comes back
+  // into view, but never while a save is in flight or someone is typing.
+  const pending = useRef(0); // saves still on their way to SharePoint
+  const edits = useRef(0); // bumped by every change made on this screen
+  const lastLoad = useRef(0);
+
   const load = useCallback(() => {
+    lastLoad.current = Date.now();
     api.get<BoardData>(`/api/boards/${boardId}`).then((d) => { setData(d); setError(null); }).catch((e) => setError(e.message));
   }, [boardId]);
   useEffect(() => { setData(null); load(); }, [load]);
 
+  const refresh = useCallback(async () => {
+    if (pending.current || typingNow() || Date.now() - lastLoad.current < 10_000) return;
+    lastLoad.current = Date.now();
+    const at = edits.current;
+    try {
+      const d = await api.get<BoardData>(`/api/boards/${boardId}`);
+      // Drop the result if anything changed on this screen while it was loading.
+      if (at === edits.current && !pending.current && !typingNow()) setData(d);
+    } catch { /* offline for a moment; the next refresh will try again */ }
+  }, [boardId]);
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === 'visible') refresh(); };
+    const timer = setInterval(tick, REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick); window.removeEventListener('focus', tick); };
+  }, [refresh]);
+
   // Every change is applied on screen first, then saved. If saving fails we reload.
-  const save = (p: Promise<unknown>) => p.catch((e) => { alert(`That change didn't save: ${e.message}`); load(); });
-  const mut = (fn: (d: BoardData) => BoardData) => setData((d) => (d ? fn(d) : d));
+  const save = (p: Promise<unknown>) => {
+    pending.current++;
+    return p.catch((e) => { alert(`That change didn't save: ${e.message}`); load(); }).finally(() => { pending.current--; });
+  };
+  /** For creates, where the screen updates only once SharePoint answers. */
+  const busy = async <T,>(fn: () => Promise<T>) => { pending.current++; try { return await fn(); } finally { pending.current--; } };
+  const mut = (fn: (d: BoardData) => BoardData) => { edits.current++; setData((d) => (d ? fn(d) : d)); };
 
   return {
     data, error, people, onAddPerson,
     renameBoard(name: string) { mut((d) => ({ ...d, board: { ...d.board, name } })); onRenamed(name); save(api.patch(`/api/boards/${boardId}`, { name })); },
     describeBoard(description: string) { mut((d) => ({ ...d, board: { ...d.board, description } })); save(api.patch(`/api/boards/${boardId}`, { description })); },
+    saveViews(views: BoardView[]) { mut((d) => ({ ...d, board: { ...d.board, views } })); save(api.patch(`/api/boards/${boardId}`, { views })); },
 
     patchItem(id: string, patch: Partial<Pick<Item, 'name' | 'group_id' | 'position'>> & { vals?: Record<string, any> }) {
       mut((d) => ({ ...d, items: d.items.map((i) => {
@@ -48,7 +86,7 @@ function useBoardApi(boardId: string, people: Person[], onAddPerson: (n: string,
     },
     async addItem(opts: { group_id?: string; parent_id?: string; name: string; vals?: Record<string, any> }) {
       try {
-        const item = await api.post<Item>(`/api/boards/${boardId}/items`, opts);
+        const item = await busy(() => api.post<Item>(`/api/boards/${boardId}/items`, opts));
         mut((d) => ({ ...d, items: [...d.items, item] }));
         return item;
       } catch (e: any) { alert(e.message); return null; }
@@ -60,7 +98,7 @@ function useBoardApi(boardId: string, people: Person[], onAddPerson: (n: string,
     bumpUpdates(id: string, by: number) { mut((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...i, updates: i.updates + by } : i)) })); },
 
     async addGroup() {
-      const g = await api.post<Group>(`/api/boards/${boardId}/groups`, { title: 'New Group' });
+      const g = await busy(() => api.post<Group>(`/api/boards/${boardId}/groups`, { title: 'New Group' }));
       mut((d) => ({ ...d, groups: [g, ...d.groups] }));
     },
     patchGroup(id: string, patch: Partial<Group>) {
@@ -77,7 +115,7 @@ function useBoardApi(boardId: string, people: Person[], onAddPerson: (n: string,
 
     async addColumn(type: ColumnType, is_sub: number) {
       const label = COLUMN_TYPES.find((t) => t.type === type)?.label ?? 'Column';
-      const col = await api.post<Column>(`/api/boards/${boardId}/columns`, { title: label, type, is_sub });
+      const col = await busy(() => api.post<Column>(`/api/boards/${boardId}/columns`, { title: label, type, is_sub }));
       mut((d) => ({ ...d, columns: [...d.columns, col] }));
     },
     patchColumn(id: string, patch: Partial<Pick<Column, 'title' | 'settings' | 'width'>>) {
@@ -96,33 +134,42 @@ export function Board({ boardId, people, onAddPerson, onRenamed, onDeleted }: {
   onRenamed: (name: string) => void; onDeleted: () => void;
 }) {
   const b = useBoardApi(boardId, people, onAddPerson, onRenamed);
-  const [view, setView] = useState<'table' | 'kanban'>(() => (localStorage.getItem(`view:${boardId}`) as 'kanban') || 'table');
-  const [query, setQuery] = useState('');
-  const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [openItem, setOpenItem] = useState<string | null>(null);
   const menu = useAnchor();
-  const personMenu = useAnchor();
-  useEffect(() => { try { localStorage.setItem(`view:${boardId}`, view); } catch { /* private mode */ } }, [view, boardId]);
-  useEffect(() => { setOpenItem(null); setQuery(''); setPersonFilter(null); }, [boardId]);
+
+  // Views are shared on the board; which one you last looked at is remembered
+  // per person on this computer (monday keeps that as a personal preference).
+  const viewKey = `view:${boardId}`;
+  const [activeId, setActiveId] = useState<string>(() => {
+    try { const v = localStorage.getItem(viewKey); return v === 'table' ? 'main' : v || 'main'; } catch { return 'main'; }
+  });
+  // Unsaved search/filter/sort changes to the open view; null = showing it as saved.
+  const [draft, setDraft] = useState<ViewState | null>(null);
+  useEffect(() => { try { localStorage.setItem(viewKey, activeId); } catch { /* private mode */ } }, [viewKey, activeId]);
+  useEffect(() => { setOpenItem(null); setDraft(null); }, [boardId]);
 
   const d = b.data;
-  const matches = useMemo(() => {
-    if (!d) return () => true;
-    const peopleCols = d.columns.filter((c) => c.type === 'people').map((c) => c.id);
-    const q = query.trim().toLowerCase();
-    const self = (i: Item) =>
-      (!q || i.name.toLowerCase().includes(q) || Object.values(i.vals).some((v) => typeof v === 'string' && v.toLowerCase().includes(q))) &&
-      (!personFilter || peopleCols.some((c) => (i.vals[c] ?? []).includes(personFilter)));
-    return (i: Item) => self(i) || d.items.some((s) => s.parent_id === i.id && self(s));
-  }, [d, query, personFilter]);
+  const views = d?.board.views?.length ? d.board.views : defaultViews();
+  const active = views.find((v) => v.id === activeId) ?? views[0]!;
+  const shown: ViewState = draft ?? stateOf(active);
+  const dirty = !!draft && !sameState(draft, stateOf(active));
+  const edit = (patch: Partial<ViewState>) => setDraft({ ...shown, ...patch });
+  const selectView = (id: string) => { setActiveId(id); setDraft(null); };
+
+  const { matches, anyFilter } = useMemo(() => (d ? matcher(d, shown.filter) : { matches: () => true, anyFilter: false }), [d, shown.filter]);
+  const order = useMemo(() => (d ? sorter(d, people, shown.sort) : (a: Item, z: Item) => a.position - z.position), [d, people, shown.sort]);
 
   if (b.error) return <div className="board-empty">Couldn't open this board: {b.error}</div>;
   if (!d) return <div className="board-empty">Loading…</div>;
 
   const term = d.board.item_term || 'Item';
   const firstGroup = d.groups[0];
-  const filterPerson = people.find((p) => p.id === personFilter);
   const item = openItem ? d.items.find((i) => i.id === openItem) : undefined;
+  const saveDraft = () => {
+    if (!draft) return;
+    b.saveViews(views.map((v) => (v.id === active.id ? { ...v, ...draft } : v)));
+    setDraft(null);
+  };
 
   return (
     <BoardCtx.Provider value={b}>
@@ -142,40 +189,34 @@ export function Board({ boardId, people, onAddPerson, onRenamed, onDeleted }: {
             )}
           </div>
           <EditableText className="board-desc" value={d.board.description ?? ''} placeholder="Add a board description" onSave={b.describeBoard} />
-          <div className="tabs">
-            <button className={view === 'table' ? 'tab active' : 'tab'} onClick={() => setView('table')}>▦ Main table</button>
-            <button className={view === 'kanban' ? 'tab active' : 'tab'} onClick={() => setView('kanban')}>☷ Kanban</button>
-          </div>
+          <ViewTabs views={views} active={active.id} onSelect={selectView} onChange={b.saveViews} />
           <div className="toolbar">
             <button className="btn btn-primary" disabled={!firstGroup} onClick={async () => {
               if (!firstGroup) return;
               const it = await b.addItem({ group_id: firstGroup.id, name: `New ${term.toLowerCase()}` });
               if (it) setOpenItem(it.id);
             }}>New {term.toLowerCase()}</button>
-            <input className="input search" placeholder="🔍 Search" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <button className={`btn ${personFilter ? 'btn-on' : ''}`} onClick={personMenu.toggle}>
-              {filterPerson ? <><Avatar person={filterPerson} size={18} /> {filterPerson.name}</> : '👤 Person'}
-            </button>
-            {personMenu.anchor && (
-              <Popover anchor={personMenu.anchor} onClose={personMenu.close} width={220}>
-                <div className="muted small pad">Show only items for…</div>
-                {people.map((p) => (
-                  <MenuItem key={p.id} onClick={() => { setPersonFilter(p.id); personMenu.close(); }}><Avatar person={p} size={22} /> {p.name}</MenuItem>
-                ))}
-                {personFilter && <><div className="menu-sep" /><MenuItem onClick={() => { setPersonFilter(null); personMenu.close(); }}>Show everyone</MenuItem></>}
-              </Popover>
+            <input className="input search" placeholder="🔍 Search" value={shown.filter.query ?? ''} onChange={(e) => edit({ filter: { ...shown.filter, query: e.target.value } })} />
+            <PersonButton people={people} person={shown.filter.person} onChange={(person) => edit({ filter: { ...shown.filter, person } })} />
+            <FilterButton cols={d.columns} filter={shown.filter} onChange={(filter) => edit({ filter })} />
+            {active.type === 'table' && <SortButton cols={d.columns} term={term} sort={shown.sort} onChange={(sort) => edit({ sort })} />}
+            {active.type === 'table' && <button className="btn" onClick={b.addGroup}>+ Add group</button>}
+            {dirty && (
+              <span className="view-dirty">
+                <button className="btn btn-primary" onClick={saveDraft} title="Everyone who opens this view will see it this way">Save to this view</button>
+                <button className="link-btn" onClick={() => setDraft(null)}>Reset</button>
+              </span>
             )}
-            <button className="btn" onClick={b.addGroup}>+ Add group</button>
           </div>
         </header>
 
-        {view === 'table' ? (
+        {active.type === 'table' ? (
           <div className="table-scroll">
-            {d.groups.map((g) => <GroupSection key={g.id} group={g} matches={matches} onOpen={setOpenItem} filtering={!!query || !!personFilter} />)}
+            {d.groups.map((g) => <GroupSection key={g.id} group={g} matches={matches} order={order} onOpen={setOpenItem} filtering={anyFilter} />)}
             <button className="add-group" onClick={b.addGroup}>+ Add new group</button>
           </div>
         ) : (
-          <Kanban data={d} matches={matches} onOpen={setOpenItem} />
+          <Kanban data={d} matches={matches} onOpen={setOpenItem} lanes={shown.lanes ?? null} onLanes={(lanes) => edit({ lanes })} />
         )}
       </div>
       {item && <ItemPanel item={item} onClose={() => setOpenItem(null)} />}
@@ -184,13 +225,15 @@ export function Board({ boardId, people, onAddPerson, onRenamed, onDeleted }: {
 }
 
 // ---------- Group ----------
-function GroupSection({ group, matches, onOpen, filtering }: { group: Group; matches: (i: Item) => boolean; onOpen: (id: string) => void; filtering: boolean }) {
+function GroupSection({ group, matches, order, onOpen, filtering }: {
+  group: Group; matches: (i: Item) => boolean; order: (a: Item, z: Item) => number; onOpen: (id: string) => void; filtering: boolean;
+}) {
   const b = useBoard();
   const d = b.data!;
   const menu = useAnchor();
   const [colorPick, setColorPick] = useState(false);
   const cols = d.columns.filter((c) => !c.is_sub);
-  const all = d.items.filter((i) => i.group_id === group.id && !i.parent_id).sort((a, z) => a.position - z.position);
+  const all = d.items.filter((i) => i.group_id === group.id && !i.parent_id).sort(order);
   const items = all.filter(matches);
   if (filtering && items.length === 0) return null;
   const tpl = template(cols, 360);

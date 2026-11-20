@@ -2,8 +2,11 @@
 
 The school office's own work-board app, built to replace monday.com for IBA staff.
 It keeps the way Mrs. Mora already works: boards in folders, colored groups,
-status labels, people, dates, dropdowns, subitems, comments ("updates") and a
-Kanban view.
+status labels, people, dates, dropdowns, subitems, comments ("updates"), and
+saved views like monday's: each board has view tabs (table or Kanban), and each view keeps its
+own search, filters, sort and Kanban lanes for everyone. Changes stay on your screen until you
+press **Save to this view**. Open boards re-check SharePoint every minute and when you come back
+to the tab, so other people's edits show up without reloading.
 
 - **App:** https://boards.ibakings.org/ (GitHub Pages, published by
   `.github/workflows/pages.yml` on every push to `main`; the address is set in `public/CNAME`

@@ -161,7 +161,7 @@ const DEFAULT_STATUS = { labels: [
 // ---------- Row <-> app objects ----------
 const person = (r: Row) => ({ id: r.Key, name: r.Title, email: r.Email || null, color: r.Color || null });
 const board = (r: Row) => ({ id: r.Key, name: r.Title, workspace_id: r.WorkspaceKey, folder_id: r.FolderKey || null,
-  description: r.Description || '', item_term: r.ItemTerm || 'Item', position: r.Position ?? 0 });
+  description: r.Description || '', item_term: r.ItemTerm || 'Item', position: r.Position ?? 0, views: json(r.Views, undefined) });
 const group = (r: Row) => ({ id: r.Key, board_id: r.BoardKey, title: r.Title, color: r.Color, position: r.Position ?? 0, collapsed: r.Collapsed ?? 0 });
 const column = (r: Row) => ({ id: r.Key, board_id: r.BoardKey, is_sub: r.IsSub ?? 0, title: r.Title, type: r.ColType,
   settings: json(r.Settings, {}), width: r.Width ?? null, position: r.Position ?? 0 });
@@ -236,11 +236,12 @@ export const store = {
       await create('BoardColumns', { Key: newKey(), Title: title, BoardKey: key, IsSub: isSub, ColType: type, Settings: JSON.stringify(settings), Position: i });
     return { id: key };
   },
-  async patchBoard(id: string, b: { name?: string; description?: string; item_term?: string }) {
+  async patchBoard(id: string, b: { name?: string; description?: string; item_term?: string; views?: unknown[] }) {
     const f: Record<string, unknown> = {};
     if (b.name !== undefined) f.Title = b.name;
     if (b.description !== undefined) f.Description = b.description;
     if (b.item_term !== undefined) f.ItemTerm = b.item_term;
+    if (b.views !== undefined) f.Views = JSON.stringify(b.views);
     await update('Boards', id, f);
     return { ok: true };
   },
