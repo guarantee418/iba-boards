@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from './api';
 import { Board } from './Board';
 import { signOut } from './sharepoint';
@@ -28,12 +28,12 @@ export function App() {
   }, [boot, boardId]);
 
   if (error) return (
-    <div className="board-empty">
+    <Splash>
       <p>Couldn't open IBA Boards: {error}</p>
       <button className="btn" onClick={() => signOut()}>Sign in as someone else</button>
-    </div>
+    </Splash>
   );
-  if (!boot) return <div className="board-empty">Signing you in with your school Microsoft account…</div>;
+  if (!boot) return <Splash><p>Signing you in with your school Microsoft account…</p></Splash>;
 
   const addPerson = async (name: string, email: string) => {
     const p = await api.post<Person>('/api/people', { name, email });
@@ -59,8 +59,11 @@ export function App() {
     <div className="app">
       <nav className="sidebar">
         <div className="brand">
-          <span className="brand-mark"><i /><i /><i /></span>
-          <span>IBA Boards</span>
+          <img src="/kings-crest.png" alt="IBA Kings crest" />
+          <span className="brand-text">
+            <span className="brand-name">IBA <b>Boards</b></span>
+            <span className="brand-sub">Kings · School Office</span>
+          </span>
         </div>
         <input className="input nav-search" placeholder="Find a board" value={filter} onChange={(e) => setFilter(e.target.value)} />
         <div className="nav-scroll">
@@ -106,6 +109,17 @@ export function App() {
           <div className="board-empty">No boards yet. Use the + next to a workspace to make one.</div>
         )}
       </main>
+    </div>
+  );
+}
+
+/** Full-screen Kings welcome shown while signing in, or when sign-in fails. */
+function Splash({ children }: { children: ReactNode }) {
+  return (
+    <div className="splash">
+      <img src="/kings-crest.png" alt="IBA Kings crest" />
+      <h1>IBA <b>Boards</b></h1>
+      {children}
     </div>
   );
 }

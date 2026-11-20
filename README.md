@@ -30,6 +30,12 @@ npm install
 npm run dev     # http://localhost:5173/  (same SharePoint data as the live app)
 ```
 
+http://localhost:5173/?demo previews the design with made-up sample data (`src/demo.ts`),
+without signing in. It only works on `npm run dev`, never on the live site.
+
+The look follows the IBA Kings brand from the school website: purple `#541f78`, gold `#ffde17`,
+Nunito Sans and Barlow Condensed, and the Kings crest (`public/kings-crest.png`).
+
 ## Bringing boards over from monday
 
 ```bash

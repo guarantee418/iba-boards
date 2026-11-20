@@ -1,6 +1,10 @@
 // The components talk in simple REST-style paths; this maps each one to the
 // SharePoint data layer in sharepoint.ts.
-import { store } from './sharepoint';
+import { demo } from './demo';
+import { store as sharepoint } from './sharepoint';
+
+// ?demo on this Mac (npm run dev) previews the design with made-up data.
+const store = import.meta.env.DEV && new URLSearchParams(location.search).has('demo') ? demo : sharepoint;
 
 type Handler = (m: RegExpMatchArray, body: any) => Promise<unknown>;
 const routes: [string, RegExp, Handler][] = [
