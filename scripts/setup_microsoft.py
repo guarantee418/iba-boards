@@ -19,7 +19,7 @@ from msgraph import _load_env, graph  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 GRAPH_APP = "00000003-0000-0000-c000-000000000000"
-REDIRECTS = ["https://guarantee418.github.io/iba-boards/", "http://localhost:5173/iba-boards/"]
+REDIRECTS = ["https://boards.ibakings.org/", "http://localhost:5173/"]
 
 scopes = {s["value"]: s["id"] for s in
           graph("GET", f"/servicePrincipals(appId='{GRAPH_APP}')?$select=oauth2PermissionScopes")["oauth2PermissionScopes"]}

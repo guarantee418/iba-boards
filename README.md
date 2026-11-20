@@ -5,8 +5,9 @@ It keeps the way Mrs. Mora already works: boards in folders, colored groups,
 status labels, people, dates, dropdowns, subitems, comments ("updates") and a
 Kanban view.
 
-- **App:** https://guarantee418.github.io/iba-boards/ (GitHub Pages, published by
-  `.github/workflows/pages.yml` on every push to `main`).
+- **App:** https://boards.ibakings.org/ (GitHub Pages, published by
+  `.github/workflows/pages.yml` on every push to `main`; the address is set in `public/CNAME`
+  and a DNS-only CNAME `boards` → `guarantee418.github.io` in the ibakings.org DNS).
 - **Sign-in:** school Microsoft 365 accounts (the "IBA Boards" app registration,
   this tenant only).
 - **Data:** SharePoint lists on the private site
@@ -26,7 +27,7 @@ or Outlook/SharePoint group settings). People who aren't members can sign in but
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173/iba-boards/  (same SharePoint data as the live app)
+npm run dev     # http://localhost:5173/  (same SharePoint data as the live app)
 ```
 
 ## Bringing boards over from monday
