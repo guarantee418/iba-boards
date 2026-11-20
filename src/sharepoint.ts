@@ -183,7 +183,10 @@ export const store = {
     ]);
     peopleCache = people.map(person);
     const emails = [profile.mail, profile.userPrincipalName].filter(Boolean).map((e) => e!.toLowerCase());
-    me = peopleCache.find((p) => p.email && emails.includes(p.email.toLowerCase())) ?? null;
+    // A person's Email can list several addresses separated by commas
+    // (someone with more than one school account).
+    const addresses = (p: { email: string | null }) => (p.email ?? '').toLowerCase().split(',').map((e) => e.trim()).filter(Boolean);
+    me = peopleCache.find((p) => addresses(p).some((e) => emails.includes(e))) ?? null;
     if (!me) {
       const p = { Key: newKey(), Title: profile.displayName, Email: emails[0], Color: PERSON_COLORS[peopleCache.length % PERSON_COLORS.length] };
       await create('People', p);

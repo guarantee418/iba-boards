@@ -21,7 +21,9 @@ No servers and nothing to pay for: GitHub Pages and the school's Microsoft 365 A
 
 Add someone to the **IBA Boards** group (Microsoft 365 admin center → Teams & groups,
 or Outlook/SharePoint group settings). People who aren't members can sign in but see
-"You don't have access".
+"You don't have access". If someone has more than one school account, add each one, and list
+all their addresses (comma-separated) in their row of the SharePoint **People** list so the app
+knows they are the same person.
 
 ## Run it on this Mac
 
