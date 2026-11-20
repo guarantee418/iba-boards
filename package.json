@@ -1,0 +1,28 @@
+{
+  "name": "iba-boards",
+  "version": "1.0.0",
+  "description": "IBA Boards: the school office work boards",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "monday:export": "node scripts/export-monday.mjs",
+    "monday:rows": "node scripts/import-monday.mjs",
+    "upload": "~/claude-remote/.venv/bin/python scripts/upload_sharepoint.py"
+  },
+  "author": "",
+  "type": "module",
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "private": true,
+  "dependencies": {
+    "@azure/msal-browser": "^5.30.0"
+  }
+}
